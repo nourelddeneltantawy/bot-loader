@@ -65,7 +65,8 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if choice == 'video':
         ydl_opts = {
             **common_opts,
-            'format': 'best[ext=mp4]/bestvideo+bestaudio/best',
+            'format': 'bestvideo[filesize<45M]+bestaudio/best[filesize<45M]/best',
+
         }
     else:
         ydl_opts = {
