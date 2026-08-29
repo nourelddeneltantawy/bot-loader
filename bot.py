@@ -1,3 +1,4 @@
+cat << 'EOF' > bot.py
 import os
 import logging
 import yt_dlp
@@ -12,7 +13,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "السلام عليكم ورحمة الله وبركاته 🍃\n\n"
         "أهلاً بك في بوت التحميل الشامل من أبو البراء.\n"
-        "أرسل لي رابط المقطع (يوتيوب، فيسبوك، تيك توك، إلخ)، وسأتيح لك خيارات التحميل مباشرةً هنا.\n\n"
+        "أرسل لي رابط المقطع (يوتيوب، فيسبوك، تيك توك، إلخ)، وسأتيح لك خيارات التحميل.\n\n"
         "﴿وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا﴾\n"
         "⚠️ يرجى عدم استخدام البوت في تحميل ما يغضب الله تعالى."
     )
@@ -34,6 +35,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await update.message.reply_text(
+        "اختر الصيغة التي تريد تحميل المقطع بها:",
+        reply_markup=reply_markup
+    )
+
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    choice = query.data
+    url = context.user_data.get('download_url')
+
+    if not url:
+        await query.edit_message_text("حدث خطأ، يرجى إعادة إرسال الرابط مرة أخرى.")
+        return
+
+    await query.edit_message_text("جاري استخراج وتحميل المقطع... برجاء الانتظار ⏳")
+
+    file_path = None
+    output_template = f"downloads/{query.from_user.id}_%(id)s.%(ext)s"
+
+    common_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'outtmpl': output_template,
+        'nocheckcertificate': True,
+    }
+
+    if choice == 'video':
+        ydl_opts = {
+            **common_opts,
+            'format': 'best[ext=mp4]/best',
+        }
+    else:
+        ydl_opts = {
+            **common_opts,
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            
+            if choice == 'audio':
+                base, _ = os.path.splitext(file_path)
+                file_path = base + ".mp3"
+
+        await query.message.reply_text("جاري رفع الملف إلى المحادثة... 📤")
+
+        caption_text = "تم التحميل بنجاح ✨\nسبحان الله وبحمده، سبحان الله العظيم 🍃"
+
+        with open(file_path, 'rb') as f:
+            if choice == 'video':
+                await query.message.reply_video(video=f, caption=caption_text)
+            else:
+                await query.message.reply_audio(audio=f, caption=caption_text)
+
+    except Exception as e:
+        logging.error(f"Download Error: {e}")
+        await query.message.reply_text(f"حدث خطأ أثناء التنزيل: {str(e)[:100]}")
+    finally:
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
+if __name__ == '__main__':
+    if not os.path.exists('downloads'):
+        os.makedirs('downloads')
+
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CallbackQueryHandler(button_click))
+
+    app.run_polling()
+EOF
     await update.message.reply_text(
         "اختر الصيغة التي تريد تحميل المقطع بها:",
         reply_markup=reply_markup
